@@ -1,0 +1,29 @@
+---
+title: "CoV-19 Community Data Summary"
+date: "Today"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r "Source files", include=FALSE}
+source("Constants and dependencies.R")
+source("Functions.R")
+```
+```{r, include=FALSE}
+USA_cases_all <- import_JHU_data()
+
+USA_FIPS_data <- read_csv(file = "data/VHA_FIPS_20170920.csv") %>%
+  select(State, County, FIPS, VISN, Market = `Market Description`, Network = `VISN Description`) %>%
+  mutate(Market = str_remove(Market, "^.{4}"))  %>% # Remove the first 4 characters
+  mutate(Market = str_replace_all(Market, "_", " ")) %>%
+  mutate(Network = str_remove(Network, "^VA ")) # Drop leading "VA "
+rm(list = c("packages",
+            "US_cases_confirmed_URL",
+            "US_cases_deceased_URL"
+            )
+   )
+```
+

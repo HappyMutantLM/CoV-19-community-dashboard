@@ -1,7 +1,7 @@
 #####
 
 packages <- c("tidyr",
-              "plyr",
+         #     "plyr",
               "dplyr",
               "readr",
               "stringr",
