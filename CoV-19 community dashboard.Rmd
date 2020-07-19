@@ -1,0 +1,21 @@
+---
+title: "CoV-19 Community Data Summary"
+date: "Today"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r "Source files", include=FALSE}
+source("Constants and dependencies.R")
+source("Functions.R")
+```
+```{r, include=FALSE}
+USA_cases_all <- import_JHU_data()
+
+USA_FIPS_data <- read_csv(file = "data/VHA_FIPS_20170920.csv") %>%
+  select(State, County, FIPS, VISN, Market)
+```
+
