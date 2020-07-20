@@ -8,22 +8,44 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r "Source files", include=FALSE}
+```{r "Load scripts", include=FALSE}
 source("Constants and dependencies.R")
 source("Functions.R")
 ```
-```{r, include=FALSE}
-USA_cases_all <- import_JHU_data()
+```{r "Load FIPS data sets", message=TRUE, include=FALSE}
 
 USA_FIPS_data <- read_csv(file = "data/VHA_FIPS_20170920.csv") %>%
   select(State, County, FIPS, VISN, Market = `Market Description`, Network = `VISN Description`) %>%
   mutate(Market = str_remove(Market, "^.{4}"))  %>% # Remove the first 4 characters
   mutate(Market = str_replace_all(Market, "_", " ")) %>%
-  mutate(Network = str_remove(Network, "^VA ")) # Drop leading "VA "
+  mutate(Network = str_remove(Network, "^VA "))  %>% # Drop leading "VA "
+  mutate(State = str_to_title(State)) %>%
+  mutate(State =ifelse(grepl(paste(non_state, collapse = "|"), State), NA, State)) %>%  # Drop non-states. The paste() function creates a RegEx of values separated by '|'.
+  drop_na()
+
+```
+
+```{r "Load JHU data sets" message=FALSE, include=FALSE}
+USA_cases_all <- import_JHU_data()
+county_VHA_COVID_data <- USA_cases_all %>%
+  select(-State, -County) %>%
+  filter(Cases > 0) %>%
+  group_by(FIPS) %>%
+  arrange(Date) %>%
+  mutate(Recovered = lag(Alive, recovery_time)) %>% #Returns NA for days 1-recovery_time
+  replace_na(list(Recovered = 0)) %>% # Replaces NAs with zero
+  mutate(Active = Alive - Recovered) %>%
+  filter (Active >= 0) %>% # Remove errors from bad data
+  right_join(y = USA_FIPS_data, by = "FIPS")
+```
+
+```{r eval=FALSE, include=FALSE}
 rm(list = c("packages",
             "US_cases_confirmed_URL",
-            "US_cases_deceased_URL"
+            "US_cases_deceased_URL",
+            "non_state"
             )
    )
 ```
+
 
