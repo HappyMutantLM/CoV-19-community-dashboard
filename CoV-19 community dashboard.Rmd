@@ -8,6 +8,7 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+<<<<<<< HEAD
 ```{r "Load scripts", include=FALSE}
 source("Constants and dependencies.R")
 source("Functions.R")
@@ -49,3 +50,16 @@ rm(list = c("packages",
 ```
 
 
+=======
+```{r "Source files", include=FALSE}
+source("Constants and dependencies.R")
+source("Functions.R")
+```
+```{r, include=FALSE}
+USA_cases_all <- import_JHU_data()
+
+USA_FIPS_data <- read_csv(file = "data/VHA_FIPS_20170920.csv") %>%
+  select(State, County, FIPS, VISN, Market)
+```
+
+>>>>>>> d78d48cdc4dff345899c66b9031c15d858d49f52
