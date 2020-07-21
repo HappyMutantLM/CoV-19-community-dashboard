@@ -8,7 +8,7 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-<<<<<<< HEAD
+
 ```{r "Load scripts", include=FALSE}
 source("Constants and dependencies.R")
 source("Functions.R")
@@ -49,17 +49,27 @@ rm(list = c("packages",
    )
 ```
 
+```{r "COVID Project data", include=FALSE}
+## Query the COVID Project API and download state-level data
+download.file(COVID_project_URL , "data/COVID_project_data.csv")
+COVID_project_data <- read_csv(file = "data/COVID_project_data.csv")
 
-=======
-```{r "Source files", include=FALSE}
-source("Constants and dependencies.R")
-source("Functions.R")
+## Select relevant columns
+state_data <- COVID_project_data %>%
+  select(date, state, positive, totalTestsViral, deathConfirmed,
+         positiveIncrease, totalTestResultsIncrease,
+         hospitalizedCurrently, hospitalizedIncrease,
+         inIcuCurrently,  onVentilatorCurrently, 
+         deathIncrease
+        ) %>%
+  mutate(date = as.Date(as.character(date), "%Y%m%d")) %>%
+  mutate(prevalence = positive / totalTestsViral,
+         test_positive_rate = positiveIncrease / totalTestResultsIncrease,
+         CFR = deathConfirmed / totalTestsViral,
+         CFR_rate = deathIncrease / positiveIncrease,
+         hospitalization_rate_current = hospitalizedIncrease / positiveIncrease,
+         icu_rate = inIcuCurrently / hospitalizedCurrently,
+         ventilator_rate = onVentilatorCurrently / hospitalizedCurrently
+         )
+  
 ```
-```{r, include=FALSE}
-USA_cases_all <- import_JHU_data()
-
-USA_FIPS_data <- read_csv(file = "data/VHA_FIPS_20170920.csv") %>%
-  select(State, County, FIPS, VISN, Market)
-```
-
->>>>>>> d78d48cdc4dff345899c66b9031c15d858d49f52
