@@ -14,9 +14,21 @@ source("Functions.R")
 source("Constants and dependencies.R")
 
 USA_VHA_JHU_data <- build_USA_VHA_JHU_data()
-USA_VHA_TCP_data <- build_USA_VHA_TCP_data ()
-USA_VHA_JHU_clean_data = merge_census(data = USA_VHA_JHU_data, geography = "county")
-USA_VHA_TCP_clean_data = merge_census(data = USA_VHA_TCP_data, geography = "state")
+# USA_VHA_TCP_data <- build_USA_VHA_TCP_data ()
+USA_VHA_JHU_clean_data = merge_census(data = USA_VHA_JHU_data, geography = "county") %>%
+  group_by(State, County) %>%
+  arrange(Date) %>%
+  mutate(Recovered = lag(Alive , 14)) %>%
+  mutate(Recovered = replace_na(Recovered, 0)) %>%
+  mutate(Active = Alive - Recovered) %>%
+  select(Date, State, County, VISN, Cases, Died, Active, Network, Market, Census) %>%
+  group_by(State, County) %>%
+  arrange(Date) %>%
+  mutate(Death_rate = Died - lag(Died, lag = 1))
+  
+
+
+# USA_VHA_TCP_clean_data = merge_census(data = USA_VHA_TCP_data, geography = "state")
 
 ```
 
@@ -30,28 +42,24 @@ USA_VHA_TCP_clean_data = merge_census(data = USA_VHA_TCP_data, geography = "stat
   filter(grepl(paste(VISN_primary_states, collapse = "|"), State))
 
  
-## Build the table with VISN data
-## using the {current_days} value.
-  TCP_epidemiology_VISN = USA_VHA_TCP_clean_data %>%
-    filter(state%in% unique(VISN_states$State),
-           date >= (max(date) - days(current_days))
-    )
-  table_1_VISN = make_table_1(TCP_epidemiology_VISN)
-  
-## Build the table with USA dta
-  TCP_epidemiology_USA = USA_VHA_TCP_clean_data %>%
-    filter( date >= (max(date) - days(current_days)))
-  table_1_USA = make_table_1(TCP_epidemiology_USA)
-  
-## Merge the VISN and USA data tables and add row names  
-  table_1 = rbind(table_1_VISN, table_1_USA)
-  rownames(table_1) <- c(paste("VISN", selected_VISN, "states"), "U.S.A")
-
 
 ```
 
+```{r}
+rm(list = "county_types",
+ #  "COVID_project_URL",
+   "non_state",
+   "packages",
+   "USA_VHA_JHU_data",
+   "USA_VHA_TCP_data",
+   "US_cases_confirmed_URL",
+   "US_cases_deceased_URL",
+   "state_name_abb"
+   )
+```
+
 ```{r echo=FALSE}
-## Format the TCP data table ##
+## Format and print the TCP data table ##
 table_TCP_data <- table_1 %>%
  select(current_prevalence, overall_prevalence, currently_hospitalized,
         rate_hospitalized, current_CFR, overall_CFR,

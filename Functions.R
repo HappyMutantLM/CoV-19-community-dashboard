@@ -39,6 +39,7 @@ US_cases_all <- full_join(US_cases_confirmed, US_cases_deceased) %>%
          FIPS = if_else(nchar(FIPS) == 4, paste0("0", FIPS), FIPS)
   )
 # Extract the date of the most recent data point to use as the data-set date
+# and send to global environment.
 JHU_data_date <<- format(max(as_date(US_cases_all$Date, format = "%m/%d/%y")), "%B %d, %Y") 
 
 return(US_cases_all)
@@ -69,12 +70,14 @@ build_USA_VHA_TCP_data <- function() {
   
   ## Select relevant columns
   USA_VHA_TCP_data <- COVID_project_data %>%
-    select(date, state, positive, totalTestResults, deathConfirmed,
-           positiveIncrease, totalTestResultsIncrease,
-           hospitalizedCurrently, hospitalizedIncrease,
-           inIcuCurrently,  onVentilatorCurrently, 
-           deathIncrease
-    ) %>%
+    select(
+      date,
+      state,
+      hospitalizedCurrently,
+      hospitalizedIncrease,
+      inIcuCurrently,
+      onVentilatorCurrently
+    ) %>% 
     mutate(date = as.Date(as.character(date), "%Y%m%d"))  %>%
     mutate(state = str_replace_all(state, state, state.name)) 
 
@@ -112,57 +115,4 @@ merge_census <- function(data, geography) {
   return(df)
 }
 
-TCP_metric <- function(data, numerator, denominator) {
- # if (data[denominator] == 0 | is.na(data[denominator]) |is.na(data[numerator])) {
- #   return (NA)
-  #}
-  data <- data %>%
-  select(numerator, denominator) %>%
-  drop_na() 
-  #return(scales::percent(sum(data[numerator]) / sum(data[denominator]), accuracy = 0.1))
- quotient <- sum(data[numerator]) / sum(data[denominator])
-  return(scales::percent(quotient, accuracy = 0.1))
-}
 
-make_table_1<- function(data) {
-  overall_prevalence = TCP_metric(data = data,
-                                  numerator = "positive",
-                                  denominator = "totalTestResults")
-  current_prevalence = TCP_metric(data = data,
-                                  numerator = "positiveIncrease",
-                                  denominator = "totalTestResultsIncrease")
-  
-  overall_CFR = TCP_metric(data = data,
-                           numerator = "deathConfirmed",
-                           denominator = "positive")
-  current_CFR = TCP_metric(data = data,
-                           numerator = "deathIncrease",
-                           denominator = "positiveIncrease")
-  
-  currently_hospitalized = TCP_metric(data = data,
-                                      numerator = "hospitalizedCurrently",
-                                      denominator = "positive")
-  rate_hospitalized = TCP_metric(data = data,
-                                 numerator = "hospitalizedIncrease",
-                                 denominator = "positiveIncrease")
-  
-  currently_ICU = TCP_metric(data = data,
-                             numerator = "inIcuCurrently",
-                             denominator = "hospitalizedCurrently")
-  currently_vent = TCP_metric(data = data,
-                              numerator = "onVentilatorCurrently",
-                              denominator = "hospitalizedCurrently")
-  
-  d <-
-    data.frame(
-      current_prevalence,
-      overall_prevalence,
-      current_CFR,
-      overall_CFR,
-      currently_hospitalized,
-      rate_hospitalized,
-      currently_ICU,
-      currently_vent
-    ) 
-  return(d)
-}
