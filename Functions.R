@@ -44,4 +44,125 @@ JHU_data_date <<- format(max(as_date(US_cases_all$Date, format = "%m/%d/%y")), "
 return(US_cases_all)
 }
 
+build_USA_VHA_JHU_data <- function(){
+USA_FIPS_data = read_csv(file = "data/VHA_FIPS_20170920.csv") %>%
+  select(State, County, FIPS, VISN, Market = `Market Description`, Network = `VISN Description`) %>%
+  mutate(Market = str_remove(Market, "^.{4}"))  %>% # Remove the first 4 characters
+  mutate(Market = str_replace_all(Market, "_", " ")) %>%
+  mutate(Network = str_remove(Network, "^VA "))  %>% # Drop leading "VA "
+  mutate(State = str_to_title(State)) %>%
+  mutate(State =ifelse(grepl(paste(non_state, collapse = "|"), State), NA, State)) %>%  # Drop non-states. The paste() function creates a RegEx of values separated by '|'.
+  drop_na()
 
+JHU_data = import_JHU_data() %>%
+  select(-State, -County) %>%
+  filter(Cases > 0) %>%
+  right_join(y = USA_FIPS_data, by = "FIPS")
+return(JHU_data)
+}
+
+build_USA_VHA_TCP_data <- function() {
+  
+  ## Query the COVID Project API and download state-level data
+  download.file(COVID_project_URL , "data/COVID_project_data.csv")
+  COVID_project_data <- read_csv(file = "data/COVID_project_data.csv")
+  
+  ## Select relevant columns
+  USA_VHA_TCP_data <- COVID_project_data %>%
+    select(date, state, positive, totalTestResults, deathConfirmed,
+           positiveIncrease, totalTestResultsIncrease,
+           hospitalizedCurrently, hospitalizedIncrease,
+           inIcuCurrently,  onVentilatorCurrently, 
+           deathIncrease
+    ) %>%
+    mutate(date = as.Date(as.character(date), "%Y%m%d"))  %>%
+    mutate(state = str_replace_all(state, state, state.name)) 
+
+  return(USA_VHA_TCP_data)
+}
+
+merge_census <- function(data, geography) {
+  ## Taking the input value of "state" or "county" adds a column "Census"
+  ## to the supplied data frame. County data is joined by state and county while
+  ## state data is joined by state name.
+  ##
+  census_data <-
+    read.csv(file = "data/US_counties_2019_census.csv") %>%
+    mutate(
+      State = str_extract(County_State, ",.*"),
+      County_State = str_remove(County_State, ",.*"),
+      County_State = str_remove(County_State, "\\."),
+      State = str_remove(State, ","),
+      State = str_trim(State, side = "both"),
+      County_State = str_remove(County_State, paste(county_types, collapse = "|")),
+      County_State = str_trim(County_State, side = "both")
+    ) %>%
+    select(State, County = County_State, Census) %>%
+    mutate(Census = str_remove_all(Census, ","),
+           Census = as.numeric(Census))
+  
+  if (geography == "county") {
+    df <-  left_join(data, census_data, by = c("State", "County"))
+  }     else {
+    census_data <- census_data %>%
+      group_by(State) %>%
+      summarise(Census = sum(Census))
+    df <- left_join(data, census_data, by = c("state" = "State"))
+  }
+  return(df)
+}
+
+TCP_metric <- function(data, numerator, denominator) {
+ # if (data[denominator] == 0 | is.na(data[denominator]) |is.na(data[numerator])) {
+ #   return (NA)
+  #}
+  data <- data %>%
+  select(numerator, denominator) %>%
+  drop_na() 
+  #return(scales::percent(sum(data[numerator]) / sum(data[denominator]), accuracy = 0.1))
+ quotient <- sum(data[numerator]) / sum(data[denominator])
+  return(scales::percent(quotient, accuracy = 0.1))
+}
+
+make_table_1<- function(data) {
+  overall_prevalence = TCP_metric(data = data,
+                                  numerator = "positive",
+                                  denominator = "totalTestResults")
+  current_prevalence = TCP_metric(data = data,
+                                  numerator = "positiveIncrease",
+                                  denominator = "totalTestResultsIncrease")
+  
+  overall_CFR = TCP_metric(data = data,
+                           numerator = "deathConfirmed",
+                           denominator = "positive")
+  current_CFR = TCP_metric(data = data,
+                           numerator = "deathIncrease",
+                           denominator = "positiveIncrease")
+  
+  currently_hospitalized = TCP_metric(data = data,
+                                      numerator = "hospitalizedCurrently",
+                                      denominator = "positive")
+  rate_hospitalized = TCP_metric(data = data,
+                                 numerator = "hospitalizedIncrease",
+                                 denominator = "positiveIncrease")
+  
+  currently_ICU = TCP_metric(data = data,
+                             numerator = "inIcuCurrently",
+                             denominator = "hospitalizedCurrently")
+  currently_vent = TCP_metric(data = data,
+                              numerator = "onVentilatorCurrently",
+                              denominator = "hospitalizedCurrently")
+  
+  d <-
+    data.frame(
+      current_prevalence,
+      overall_prevalence,
+      current_CFR,
+      overall_CFR,
+      currently_hospitalized,
+      rate_hospitalized,
+      currently_ICU,
+      currently_vent
+    ) 
+  return(d)
+}

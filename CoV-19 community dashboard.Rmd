@@ -1,6 +1,5 @@
 ---
-title: "CoV-19 Community Data Summary"
-date: "Today"
+title: 
 output: pdf_document
 ---
 
@@ -8,68 +7,68 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+\pagenumbering{gobble}
 
-```{r "Load scripts", include=FALSE}
-source("Constants and dependencies.R")
+```{r include=FALSE}
 source("Functions.R")
-```
-```{r "Load FIPS data sets", message=TRUE, include=FALSE}
+source("Constants and dependencies.R")
 
-USA_FIPS_data <- read_csv(file = "data/VHA_FIPS_20170920.csv") %>%
-  select(State, County, FIPS, VISN, Market = `Market Description`, Network = `VISN Description`) %>%
-  mutate(Market = str_remove(Market, "^.{4}"))  %>% # Remove the first 4 characters
-  mutate(Market = str_replace_all(Market, "_", " ")) %>%
-  mutate(Network = str_remove(Network, "^VA "))  %>% # Drop leading "VA "
-  mutate(State = str_to_title(State)) %>%
-  mutate(State =ifelse(grepl(paste(non_state, collapse = "|"), State), NA, State)) %>%  # Drop non-states. The paste() function creates a RegEx of values separated by '|'.
-  drop_na()
+USA_VHA_JHU_data <- build_USA_VHA_JHU_data()
+USA_VHA_TCP_data <- build_USA_VHA_TCP_data ()
+USA_VHA_JHU_clean_data = merge_census(data = USA_VHA_JHU_data, geography = "county")
+USA_VHA_TCP_clean_data = merge_census(data = USA_VHA_TCP_data, geography = "state")
 
 ```
 
-```{r "Load JHU data sets" message=FALSE, include=FALSE}
-USA_cases_all <- import_JHU_data()
-county_VHA_COVID_data <- USA_cases_all %>%
-  select(-State, -County) %>%
-  filter(Cases > 0) %>%
-  group_by(FIPS) %>%
-  arrange(Date) %>%
-  mutate(Recovered = lag(Alive, recovery_time)) %>% #Returns NA for days 1-recovery_time
-  replace_na(list(Recovered = 0)) %>% # Replaces NAs with zero
-  mutate(Active = Alive - Recovered) %>%
-  filter (Active >= 0) %>% # Remove errors from bad data
-  right_join(y = USA_FIPS_data, by = "FIPS")
-```
+```{r include=FALSE}
 
-```{r eval=FALSE, include=FALSE}
-rm(list = c("packages",
-            "US_cases_confirmed_URL",
-            "US_cases_deceased_URL",
-            "non_state"
-            )
-   )
-```
+## Filter for the states that correspond to the selected VISN ##
+ VISN_states = USA_VHA_JHU_clean_data %>%
+    select(State, VISN) %>%
+    distinct() %>%
+    filter(VISN == selected_VISN) %>%
+  filter(grepl(paste(VISN_primary_states, collapse = "|"), State))
 
-```{r "COVID Project data", include=FALSE}
-## Query the COVID Project API and download state-level data
-download.file(COVID_project_URL , "data/COVID_project_data.csv")
-COVID_project_data <- read_csv(file = "data/COVID_project_data.csv")
-
-## Select relevant columns
-state_data <- COVID_project_data %>%
-  select(date, state, positive, totalTestsViral, deathConfirmed,
-         positiveIncrease, totalTestResultsIncrease,
-         hospitalizedCurrently, hospitalizedIncrease,
-         inIcuCurrently,  onVentilatorCurrently, 
-         deathIncrease
-        ) %>%
-  mutate(date = as.Date(as.character(date), "%Y%m%d")) %>%
-  mutate(prevalence = positive / totalTestsViral,
-         test_positive_rate = positiveIncrease / totalTestResultsIncrease,
-         CFR = deathConfirmed / totalTestsViral,
-         CFR_rate = deathIncrease / positiveIncrease,
-         hospitalization_rate_current = hospitalizedIncrease / positiveIncrease,
-         icu_rate = inIcuCurrently / hospitalizedCurrently,
-         ventilator_rate = onVentilatorCurrently / hospitalizedCurrently
-         )
+ 
+## Build the table with VISN data
+## using the {current_days} value.
+  TCP_epidemiology_VISN = USA_VHA_TCP_clean_data %>%
+    filter(state%in% unique(VISN_states$State),
+           date >= (max(date) - days(current_days))
+    )
+  table_1_VISN = make_table_1(TCP_epidemiology_VISN)
   
+## Build the table with USA dta
+  TCP_epidemiology_USA = USA_VHA_TCP_clean_data %>%
+    filter( date >= (max(date) - days(current_days)))
+  table_1_USA = make_table_1(TCP_epidemiology_USA)
+  
+## Merge the VISN and USA data tables and add row names  
+  table_1 = rbind(table_1_VISN, table_1_USA)
+  rownames(table_1) <- c(paste("VISN", selected_VISN, "states"), "U.S.A")
+
+
+```
+
+```{r echo=FALSE}
+## Format the TCP data table ##
+table_TCP_data <- table_1 %>%
+ select(current_prevalence, overall_prevalence, currently_hospitalized,
+        rate_hospitalized, current_CFR, overall_CFR,
+        currently_ICU, currently_vent)
+kable(table_TCP_data, "latex", booktabs = TRUE, 
+      col.names = c("Current", "Overall", "Current","Overall",
+                    "Current", "Overall",
+                     "Currently ICU", "Currently Ventilator"
+                    )
+      ) %>%
+  kable_styling(latex_options = "striped", full_width = TRUE, font_size = 12) %>%
+  footnote(number = c("Data: The COVID Project")) %>%
+  column_spec(1, bold = TRUE) %>%
+  add_header_above(c(" ", "Prevalence" = 2, "Hospitalized" = 2, "CFR" = 2, " " = 2)) %>%
+  add_header_above(c("Current & Overall CoV-19 Community Epidemiology" = 9),
+                   italic = TRUE, font_size = 14) %>%
+  landscape()
+
+
 ```
