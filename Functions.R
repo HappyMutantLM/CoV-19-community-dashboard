@@ -73,14 +73,19 @@ build_USA_VHA_TCP_data <- function() {
     select(
       date,
       state,
+      positive,
+      positiveIncrease,
+      deathConfirmed,
+      deathIncrease,,
+      totalTestResults,
+      totalTestResultsIncrease,
       hospitalizedCurrently,
       hospitalizedIncrease,
       inIcuCurrently,
       onVentilatorCurrently
     ) %>% 
-    mutate(date = as.Date(as.character(date), "%Y%m%d"))  %>%
-    mutate(state = str_replace_all(state, state, state.name)) 
-
+    mutate(date = as.Date(as.character(date), "%Y%m%d")) 
+  
   return(USA_VHA_TCP_data)
 }
 
@@ -115,4 +120,20 @@ merge_census <- function(data, geography) {
   return(df)
 }
 
+calculate_rate <-
+  function(data, numerator, denominator, max_date = FALSE) {
+    if (max_date == TRUE)
+      filter(data, date == max(date))
+    data <- data %>%
+      select(numerator, denominator) %>%
+      drop_na()
+    # Return NA if data frame contains nothing i.e. all data frame rows had NA
+    # and were dropped.
+    if (nrow(data >= 1)) {
+      quotient <- sum(data[numerator]) / sum(data[denominator])
+      return(scales::percent(quotient, accuracy = 0.1))
+    } else {
+      return(NA)
+    }
+  }
 

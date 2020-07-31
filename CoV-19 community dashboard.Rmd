@@ -1,0 +1,165 @@
+---
+title: 
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\pagenumbering{gobble}
+
+```{r include=FALSE}
+source("Functions.R")
+source("Constants and dependencies.R")
+
+USA_VHA_JHU_data <- build_USA_VHA_JHU_data()
+USA_VHA_TCP_data <- build_USA_VHA_TCP_data ()
+USA_VHA_JHU_clean_data = merge_census(data = USA_VHA_JHU_data, geography = "county") %>%
+  group_by(State, County) %>%
+  arrange(Date) %>%
+  mutate(Recovered = lag(Alive , 14)) %>%
+  mutate(Recovered = replace_na(Recovered, 0)) %>%
+  mutate(Active = Alive - Recovered) %>%
+  select(Date,
+         State,
+         County,
+         VISN,
+         Cases,
+         Died,
+         Active,
+         Network,
+         Market,
+         Census) %>%
+  group_by(State, County) %>%
+  arrange(Date) %>%
+  mutate(Death_rate = Died - lag(Died, lag = 1))
+
+
+USA_VHA_TCP_clean_data <-
+  merge_census(data = USA_VHA_TCP_data, geography = "state") %>%
+  mutate(state = str_replace_all(state, state_name_abb)) %>%
+  filter(state %in% state.name) %>%
+  mutate(deathConfirmed = replace_na(deathConfirmed, 0)) %>%
+  mutate(Alive = positive - deathConfirmed) %>%
+  group_by(state) %>%
+  arrange(date) %>%
+  mutate(recovered = lag(Alive, recovery_time)) %>%
+  mutate (recovered = replace_na(recovered, 0)) %>%
+  mutate(active = Alive - recovered)
+
+```
+
+```{r eval=FALSE, include=FALSE}
+## Filter for the states that correspond to the selected VISN ##
+VISN_states = USA_VHA_JHU_clean_data %>%
+  select(State, VISN) %>%
+  distinct() %>%
+  filter(VISN == selected_VISN) %>%
+  filter(grepl(paste(VISN_primary_states, collapse = "|"), State))
+```
+
+```{r include=FALSE}
+calculate_R0 <- function(data) {
+  data <- data %>%
+    filter(date == max(date) | date == max(date) - days(recovery_time)) %>%
+    group_by(date) %>%
+    summarise(growth = sum(Alive)) %>%
+    arrange(date)
+  R0 <- data$growth[2] / data$growth[1]
+  return(round(R0, 2))
+}
+
+for (x in c(1, 2)) {
+table_1_VISN <- USA_VHA_TCP_clean_data
+if (x == 1) {
+table_1_VISN <-
+filter(table_1_VISN, grepl(paste(VISN_primary_states, collapse = "|"), state))
+}
+prevalence_overall[x] <- calculate_rate(table_1_VISN, "positive", "totalTestResults", max_date = TRUE)
+CFR_overall[x] <- calculate_rate(table_1_VISN, "deathConfirmed", "positive", max_date = TRUE)
+hospitalization_rate_overall[x] <- calculate_rate(table_1_VISN, "hospitalizedIncrease", "positiveIncrease")
+prevalence_current[x] <- calculate_rate(table_1_VISN, "positiveIncrease", "totalTestResultsIncrease", max_date = TRUE)
+CFR_current[x] <- calculate_rate(table_1_VISN, "deathIncrease", "positiveIncrease", max_date = TRUE)
+hospitalization_rate_current[x] <- calculate_rate(table_1_VISN, "hospitalizedCurrently", "active")
+ICU_current[x] <- calculate_rate(table_1_VISN, "inIcuCurrently", "hospitalizedCurrently", max_date = TRUE)
+ventilator_current[x] <- calculate_rate(table_1_VISN, "onVentilatorCurrently", "hospitalizedCurrently", max_date = TRUE)
+R0[x] <- calculate_R0(table_1_VISN)
+
+}
+
+table_1_clean <- data.frame(
+prevalence_current,
+prevalence_overall,
+hospitalization_rate_current,
+hospitalization_rate_overall,
+CFR_current,
+CFR_overall,
+ICU_current,
+ventilator_current,
+R0
+)
+row.names(table_1_clean) <- c(paste("VISN", selected_VISN, "catchment"), "U.S.A.")
+
+```
+
+```{r include=FALSE}
+rm(
+  list = "county_types",
+  "COVID_project_URL",
+  "non_state",
+  "packages",
+  "USA_VHA_JHU_data",
+  "USA_VHA_TCP_data",
+  "US_cases_confirmed_URL",
+  "US_cases_deceased_URL",
+  "state_name_abb"
+)
+```
+
+```{r echo=FALSE}
+## Format and print the TCP data table ##
+
+kable(
+  table_1_clean,
+  "latex",
+  booktabs = TRUE,
+  align = rep("c", 10),
+  col.names = c(
+    "Current",
+    "Overall",
+    "Current",
+    "Overall",
+    "Current",
+    "Overall",
+    "Currently ICU",
+    "Currently Ventilator",
+    "Current R0"
+  )
+) %>%
+  kable_styling(latex_options = "striped",
+              #  full_width = TRUE,
+                font_size = 12) %>%
+  footnote(number = c("Data: The COVID Project",
+                      "Hospitalized is % of active cases",
+                      "ICU & ventilator are % of hospitalized",
+                      "R0 based on recovery period"
+                      )
+           ) %>%
+  column_spec(1, bold = TRUE) %>%
+  add_header_above(c(
+    " ",
+    "Prevalence" = 2,
+    "Hospitalized" = 2,
+    "CFR" = 2,
+    " " = 3
+  )) %>%
+  add_header_above(
+    c("Current & Overall CoV-19 Community Epidemiology" = 10),
+    italic = TRUE,
+    font_size = 14
+  ) %>%
+  landscape()
+
+
+```
